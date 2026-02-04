@@ -2,5 +2,15 @@
   "manifest_version": 3,
   "name": "CoTrace",
   "version": "1.0",
-  "description": "Chrome Extension for Semantic Summarization of Collaborative Changes"
+  "description": "Chrome Extension for Semantic Summarization of Collaborative Changes",
+
+  "content_scripts": [
+    {
+      "js": ["scripts/content.js"],
+      "matches": [
+        "https://developer.chrome.com/docs/extensions/*",
+        "https://developer.chrome.com/docs/webstore/*"
+      ]
+    }
+  ]
 }
