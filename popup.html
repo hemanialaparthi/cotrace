@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>cotrace</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <h1>cotrace</h1>
+      <p>Collaborative Trace Engine</p>
+    </div>
+
+    <div class="card">
+      <h3>Active File</h3>
+      <p id="docTitle">No file detected</p>
+      <p class="meta" id="fileType">-</p>
+    </div>
+
+    <div class="card">
+      <button id="loginBtn">Connect Google</button>
+      <button id="analyzeBtn" class="secondary">Analyze File</button>
+    </div>
+
+    <div class="card">
+      <h3>Metadata</h3>
+      <div class="row"><span>Owner</span><span id="owner">-</span></div>
+      <div class="row"><span>Last Modified</span><span id="modified">-</span></div>
+      <div class="row"><span>Revisions</span><span id="revisions">-</span></div>
+    </div>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
