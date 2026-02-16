@@ -22,7 +22,7 @@ function detectGoogleFile() {
   const url = window.location.href;
   let type = null;
 
-  if (url.includes("/document/")) type = "doc";uj
+  if (url.includes("/document/")) type = "doc";
   if (url.includes("/spreadsheets/")) type = "sheet";
   if (url.includes("/presentation/")) type = "slide";
 
