@@ -13,6 +13,15 @@
     "https://docs.google.com/*",
     "https://www.googleapis.com/*"
   ],
+  "oauth2": {
+    "client_id": "157960230143-sphgjef36c9bqto0a0od0e05jrg5g630.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/drive.metadata.readonly",
+      "https://www.googleapis.com/auth/spreadsheets.readonly",
+      "https://www.googleapis.com/auth/documents.readonly"
+    ]
+  },
   "action": {
     "default_popup": "popup.html"
   },
