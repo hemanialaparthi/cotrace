@@ -61,3 +61,8 @@ button.secondary {
   background: #e5e7eb;
   color: #111;
 }
+
+.button__haptic:hover {
+  background: pink;
+  box-shadow: 9px;
+}
