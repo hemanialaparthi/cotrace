@@ -11,7 +11,7 @@ chrome.storage.local.get(["activeFile"], (data) => {
 document.getElementById("loginBtn").addEventListener("click", () => {
   chrome.runtime.sendMessage({ action: "AUTH" }, (res) => {
     if (res?.success) {
-      alert("Connected to Google");
+      console.log("Connected to Google.");
     }
   });
 });
