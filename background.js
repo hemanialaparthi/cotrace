@@ -39,7 +39,7 @@ function detectGoogleFile() {
 function authenticate(sendResponse) {
   chrome.identity.getAuthToken({ interactive: true }, (token) => {
     if (chrome.runtime.lastError) {
-      console.error(chrome.runtime.lastError);
+      console.error(chrome.runtime.lastError.message);
       sendResponse({ success: false });
       return;
     }

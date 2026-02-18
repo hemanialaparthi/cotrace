@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "key":"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyvlOCVpAlsvWuCA3B2oirtMwy2eVqE9k4RXelrNpic3luCsdGNsDbS3kErzqUm+s0m19/dFoxb3Af072aIP+JteMdwuSjc9QmmdZRNtTIsh+bdk7qeqURODuEV5Az1SIdhOr8PONEH5cBf+Sb6IFAVUQsIAJ/1mo4o0RnDkIvlHF/4n/sLTVDf6JGW4Xxtj+Rb2SJkkRzVHv5c/H1BarIpTycvyaHXDEUsv+/muY7RGp9i6VJZnO4mYQCfX3JeZSWbUFhyb+3HxaHJXRrrrNtF8q9VjvkYPXwmBfgU2D1GHgjAhj3wg3NRrZXNoGZsd5suxhJOMAJ2gEyaxAgM2UOQIDAQAB",    
   "name": "cotrace",
   "version": "1.0",
   "description": "Chrome Extension for Semantic Summarization of Collaborative Changes",
