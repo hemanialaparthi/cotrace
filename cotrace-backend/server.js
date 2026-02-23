@@ -35,7 +35,7 @@ app.post("/summarize", async (req, res) => {
               type: 'object',
               properties: {
                 'user': {type: 'string'},
-                'diff': {type: 'string'}
+                'diff': {type: 'array' , items: {type: 'string'}}
               },
               required: ['user', 'diff'],
               additionalProperties: false
