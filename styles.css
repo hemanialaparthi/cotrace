@@ -67,3 +67,86 @@ button.secondary {
   box-shadow: 9px;
   color: #222;
 }
+
+/* AI Summary Section Styles */
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #667eea;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin: 15px auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+#loading {
+  text-align: center;
+  padding: 20px;
+  color: #667eea;
+}
+
+#loading p {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+/* Summary container */
+#summary-container {
+  background: #f0f4ff;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+}
+
+#summary-content {
+  line-height: 1.6;
+  color: #333;
+  margin-bottom: 12px;
+  font-size: 14px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Error display */
+#error-container {
+  background: #fee;
+  border: 2px solid #f88;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.error-text {
+  color: #d00;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* Utility classes */
+.hidden {
+  display: none !important;
+}
+
+/* Button styling for summary buttons */
+#copy-summary-btn,
+#close-summary-btn {
+  margin-top: 8px;
+}
+
+#copy-summary-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+#close-summary-btn {
+  background: #999;
+}
+
+#close-summary-btn:hover {
+  background: #777;
+}
