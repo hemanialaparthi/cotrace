@@ -30,6 +30,36 @@
       <div class="row"><span>Revisions</span><span id="revisions">-</span></div>
     </div>
 
+    <!-- AI Summary Section -->
+    <div class="section">
+      <h2>AI Version Summary</h2>
+      
+      <label for="version-select">Select Version:</label>
+      <select id="version-select">
+        <option value="">-- Choose a version --</option>
+      </select>
+      
+      <button id="summarize-btn" disabled>Generate AI Summary</button>
+      
+      <!-- Loading spinner -->
+      <div id="loading" class="hidden">
+        <div class="spinner"></div>
+        <p>Generating summary...</p>
+      </div>
+      
+      <!-- Summary display -->
+      <div id="summary-container" class="hidden">
+        <div id="summary-content"></div>
+        <button id="copy-summary-btn">Copy Summary</button>
+        <button id="close-summary-btn">Close</button>
+      </div>
+      
+      <!-- Error display -->
+      <div id="error-container" class="hidden">
+        <p class="error-text"></p>
+      </div>
+    </div>
+
   </div>
 
   <script src="popup.js"></script>
