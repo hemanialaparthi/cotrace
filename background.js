@@ -104,6 +104,60 @@ async function fetchRevisions(fileId) {
   }
 }
 
+async function fetchRevisionContent(fileId, revisionId) {
+  if (!authToken) {
+    console.error("No auth token available");
+    return null;
+  }
+
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${revisionId}?fields=*`,
+      {
+        headers: {
+          "Authorization": "Bearer " + authToken
+        }
+      }
+    );
+    
+    if (!res.ok) {
+      const errorBody = await res.text();
+      console.error("API Error:", res.status, errorBody);
+      return null;
+    }
+    
+    const revisionData = await res.json();
+    console.log("Revision data:", revisionData);
+    
+    // Get the export links for the file
+    const exportUrl = revisionData.exportLinks?.['text/plain'] || 
+                      revisionData.exportLinks?.['text/html'] ||
+                      revisionData.webContentLink;
+    
+    if (!exportUrl) {
+      console.error("No export link available for this revision");
+      return null;
+    }
+    
+    // Fetch the actual content
+    const contentRes = await fetch(exportUrl, {
+      headers: {
+        "Authorization": "Bearer " + authToken
+      }
+    });
+    
+    if (!contentRes.ok) {
+      console.error("Content fetch error:", contentRes.status);
+      return null;
+    }
+    
+    return contentRes.text();
+  } catch (error) {
+    console.error("Fetch error:", error);
+    return null;
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "AUTH") {
     authenticate(sendResponse);
@@ -120,6 +174,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ meta, revisions });
     }).catch((error) => {
       console.error("Error fetching data:", error);
+      sendResponse({ error: error.message });
+    });
+
+    return true;
+  }
+
+  if (msg.action === "FETCH_REVISION_CONTENT") {
+    const { fileId, revisionId } = msg;
+
+    fetchRevisionContent(fileId, revisionId).then((content) => {
+      sendResponse({ content });
+    }).catch((error) => {
+      console.error("Error fetching revision content:", error);
       sendResponse({ error: error.message });
     });
 
