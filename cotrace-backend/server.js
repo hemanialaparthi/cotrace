@@ -9,7 +9,13 @@ app.use(express.json());
 
 app.post("/summarize", async (req, res) => {
   try {
-    const { content } = req.body;
+    const { content, type } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: "Content is required" });
+    }
+
+    const prompt = `Summarize the following ${type || 'document'} version concisely:\n\n${content}`;
 
     const response = await axios.post(
       "https://api.anthropic.com/v1/messages",
@@ -19,7 +25,7 @@ app.post("/summarize", async (req, res) => {
         messages: [
           {
             role: "user",
-            content: `Summarize the following document version:\n\n${content}`
+            content: prompt
           }
         ]
       },
@@ -32,10 +38,10 @@ app.post("/summarize", async (req, res) => {
       }
     );
 
-    res.json({ summary: response.data.content[0].text });
+    res.json({ success: true, summary: response.data.content[0].text });
   } catch (error) {
     console.error(error.response?.data || error.message);
-    res.status(500).json({ error: "Failed to summarize" });
+    res.status(500).json({ error: "Failed to summarize", details: error.message });
   }
 });
 
