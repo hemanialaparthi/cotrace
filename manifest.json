@@ -12,6 +12,8 @@
   ],
   "host_permissions": [
     "https://docs.google.com/*",
+    "https://sheets.google.com/*",
+    "https://slides.google.com/*",
     "https://www.googleapis.com/*"
   ],
   "oauth2": {
