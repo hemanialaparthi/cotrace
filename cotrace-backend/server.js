@@ -20,14 +20,28 @@ app.post("/summarize", async (req, res) => {
     const response = await axios.post(
       "https://api.anthropic.com/v1/messages",
       {
-        model: "claude-3-haiku-20240307",
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 500,
         messages: [
           {
             role: "user",
             content: prompt
           }
-        ]
+        ],
+        output_config: {
+          format: {
+            type: 'json_schema',
+            schema: {
+              type: 'object',
+              properties: {
+                'user': {type: 'string'},
+                'diff': {type: 'string'}
+              },
+              required: ['user', 'diff'],
+              additionalProperties: false
+            }
+          },
+        }
       },
       {
         headers: {
