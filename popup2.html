@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cotrace Extension</title>
+  <link rel="stylesheet" href="styles2.css" />
+</head>
+<body>
+
+  <div class="panel">
+    <div class="header">
+      <button class="icon-btn" title="Account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+      </button>
+      <button class="icon-btn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-target="view-chat">Chat</button>
+      <button class="tab" data-target="view-contribution">Contribution</button>
+      <button class="tab" data-target="view-diff">Diff</button>
+    </div>
+
+    <!-- Chat View (default) -->
+    <div class="view active" id="view-chat">
+      <div class="chat-messages"></div>
+      <div class="chat-input-wrap">
+        <textarea class="chat-input" rows="1" placeholder="What would you like to know?"></textarea>
+        <button class="send-btn" title="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Contribution View -->
+    <div class="view" id="view-contribution">
+      <div class="contrib-list">
+        <div>
+          <div class="user-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+            username 1
+          </div>
+          <div class="changes-group">
+            <div class="change-pill">changes 1</div>
+            <div class="change-pill">changes 2</div>
+          </div>
+        </div>
+        <div>
+          <div class="user-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+            username 2
+          </div>
+          <div class="changes-group">
+            <div class="change-pill">changes 1</div>
+            <div class="change-pill">changes 2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Diff View -->
+    <div class="view" id="view-diff">
+      <div class="diff-section">
+        <div class="diff-label">Version 1</div>
+        <div class="select-wrap">
+          <select class="version-select">
+            <option value="" disabled selected></option>
+            <option>v1.0.0</option>
+            <option>v1.1.0</option>
+          </select>
+          <span class="select-arrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+      <div class="diff-section">
+        <div class="diff-label">Version 2</div>
+        <div class="select-wrap">
+          <select class="version-select">
+            <option value="" disabled selected></option>
+            <option>v1.0.0</option>
+            <option>v1.1.0</option>
+          </select>
+          <span class="select-arrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+      <button class="analyze-btn">Analyze</button>
+      <div class="diff-output"></div>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.target).classList.add('active');
+      });
+    });
+  </script>
+
+</body>
+</html>
