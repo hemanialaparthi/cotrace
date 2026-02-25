@@ -23,14 +23,10 @@ body {
   background: var(--bg);
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 32px;
 }
 
 .panel {
   background: var(--panel);
-  border-radius: var(--radius);
   box-shadow: var(--shadow);
   width: 300px;
   padding: 16px;
