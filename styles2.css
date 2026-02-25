@@ -114,6 +114,7 @@ body {
   color: var(--text);
   outline: none;
   resize: none;
+  field-sizing: content;
 }
 .chat-input::placeholder { color: var(--text-muted); }
 
