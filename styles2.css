@@ -162,6 +162,28 @@ body {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+/* Scrollbar styling */
+.changes-group::-webkit-scrollbar {
+  width: 8px;
+}
+
+.changes-group::-webkit-scrollbar-track {
+  background: var(--input-bg);
+  border-radius: var(--radius-sm);
+}
+
+.changes-group::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.changes-group::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .change-pill {
