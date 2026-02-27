@@ -77,17 +77,39 @@ function switchTab(targetId, tabElement) {
 
   // Handle contributions tab - populate it with data
   if (targetId === 'view-contribution') {
-    console.log('Contributions tab clicked, revisionHistory:', revisionHistory);
+    const contribList = document.getElementById('contrib-list');
+    
+    if (!activeFile) {
+      if (contribList) {
+        contribList.innerHTML = '<p style="color: var(--text-muted); padding: 12px; text-align: center;">No document detected. Please open a Google Doc, Sheet, or Slide.</p>';
+      }
+      return;
+    }
+    
     if (!revisionHistory) {
+      // Show loading state
       console.log('No revision history, fetching...');
+      if (contribList) {
+        contribList.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted);"><div class="spinner" style="margin: 0 auto 8px; display: inline-block; width: 16px; height: 16px; border: 2px solid var(--text-muted); border-top-color: var(--text); border-radius: 50%; animation: spin 0.6s linear infinite;"></div><p>Loading contributions...</p></div>';
+      }
+      
       fetchFileMetadata().then(success => {
-        console.log('Fetch result:', success);
-        if (success) {
+        console.log('Fetch result:', success, 'revisionHistory:', revisionHistory);
+        if (success && revisionHistory) {
           populateContributions();
+        } else {
+          if (contribList) {
+            contribList.innerHTML = '<p style="color: var(--text-muted); padding: 12px; text-align: center;">Failed to load contributions. Please click the account button to authenticate first.</p>';
+          }
+        }
+      }).catch(err => {
+        console.error('Error fetching metadata:', err);
+        if (contribList) {
+          contribList.innerHTML = '<p style="color: var(--text-muted); padding: 12px; text-align: center;">Error loading contributions. Please try again.</p>';
         }
       });
     } else {
-      console.log('Using cached revision history');
+      console.log('Using cached revision history, populating contributions');
       populateContributions();
     }
   }
@@ -214,21 +236,31 @@ async function processQuery(query) {
 }
 
 async function fetchFileMetadata() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    if (!activeFile) {
+      console.error('No active file');
+      resolve(false);
+      return;
+    }
+
     chrome.runtime.sendMessage(
       { action: 'FETCH_DATA', fileId: activeFile.id },
       (res) => {
         if (chrome.runtime.lastError) {
           console.error('Message error:', chrome.runtime.lastError);
-          resolve(false);
+          reject(chrome.runtime.lastError);
           return;
         }
+        
+        console.log('FETCH_DATA response:', res);
+        
         if (res && res.meta && res.revisions) {
           fileMetadata = res.meta;
           revisionHistory = res.revisions;
+          console.log('Successfully fetched data. Revisions count:', revisionHistory.revisions?.length);
           resolve(true);
         } else {
-          console.error('Invalid response:', res);
+          console.error('Invalid response format:', res);
           resolve(false);
         }
       }
@@ -245,29 +277,64 @@ function populateContributions() {
     return;
   }
 
-  if (!revisionHistory || !revisionHistory.revisions || revisionHistory.revisions.length === 0) {
-    contribList.innerHTML = '<p style="color: var(--text-muted); padding: 12px; text-align: center;">No revision history available. Make sure you\'ve logged in first.</p>';
+  if (!revisionHistory) {
+    console.error('revisionHistory is null or undefined');
+    contribList.innerHTML = '<p style="color: var(--text-muted); padding: 12px; text-align: center;">No revision history loaded.</p>';
     return;
   }
 
-  // Group revisions by user
+  if (!revisionHistory.revisions || revisionHistory.revisions.length === 0) {
+    console.log('No revisions found in revisionHistory');
+    contribList.innerHTML = '<p style="color: var(--text-muted); padding: 12px; text-align: center;">No revisions available for this document.</p>';
+    return;
+  }
+
+  console.log('Revisions data:', revisionHistory);
+  console.log('Number of revisions:', revisionHistory.revisions.length);
+
+  // Group revisions by user with timestamps for sorting
   const userContributions = {};
   
-  revisionHistory.revisions.forEach(revision => {
-    const userName = revision.lastModifyingUser?.displayName || 'Unknown';
-    const modifiedTime = new Date(revision.modifiedTime);
-    const dateStr = modifiedTime.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    if (!userContributions[userName]) {
-      userContributions[userName] = [];
+  revisionHistory.revisions.forEach((revision, index) => {
+    try {
+      // Try multiple possible field names for user data
+      let userName = 'Unknown';
+      
+      if (revision.lastModifyingUser?.displayName) {
+        userName = revision.lastModifyingUser.displayName;
+      } else if (revision.lastModifyingUser?.emailAddress) {
+        userName = revision.lastModifyingUser.emailAddress;
+      } else if (revision.lastModifyingUser) {
+        userName = JSON.stringify(revision.lastModifyingUser);
+      } else if (revision.modifiedByUser?.displayName) {
+        userName = revision.modifiedByUser.displayName;
+      } else if (revision.modifiedByUser?.emailAddress) {
+        userName = revision.modifiedByUser.emailAddress;
+      } else if (revision.author?.displayName) {
+        userName = revision.author.displayName;
+      } else if (revision.author?.emailAddress) {
+        userName = revision.author.emailAddress;
+      }
+      
+      const modifiedTime = new Date(revision.modifiedTime);
+      const timestamp = modifiedTime.getTime();
+      const dateStr = modifiedTime.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      console.log(`[${index}] User="${userName}", Time="${dateStr}", Full revision:`, revision);
+      
+      if (!userContributions[userName]) {
+        userContributions[userName] = [];
+      }
+      userContributions[userName].push({ timestamp, dateStr });
+    } catch (err) {
+      console.error('Error processing revision:', revision, err);
     }
-    userContributions[userName].push(dateStr);
   });
 
   // Create HTML for each user
@@ -275,30 +342,35 @@ function populateContributions() {
   
   const userNames = Object.keys(userContributions).sort();
   if (userNames.length === 0) {
+    console.log('No user contributions found');
     contribList.innerHTML = '<p style="color: var(--text-muted); padding: 12px; text-align: center;">No contributors found.</p>';
     return;
   }
   
+  console.log(`Found ${userNames.length} contributors:`, userNames);
+  
   userNames.forEach(userName => {
-    const dates = userContributions[userName];
+    const dateObjs = userContributions[userName];
+    // Sort by timestamp descending (newest first)
+    dateObjs.sort((a, b) => b.timestamp - a.timestamp);
     
     // Create user section
     const userSection = document.createElement('div');
     userSection.className = 'contrib-user-section';
     
-    // Username header
+    // Username header with contribution count
     const userHeader = document.createElement('div');
     userHeader.className = 'contrib-username';
-    userHeader.textContent = `${userName}:`;
+    userHeader.textContent = `${userName} (${dateObjs.length} changes)`;
     
     // Dates list
     const datesList = document.createElement('div');
     datesList.className = 'contrib-dates';
     
-    dates.forEach(date => {
+    dateObjs.forEach(dateObj => {
       const dateItem = document.createElement('div');
       dateItem.className = 'contrib-date-item';
-      dateItem.textContent = date;
+      dateItem.textContent = dateObj.dateStr;
       datesList.appendChild(dateItem);
     });
     
@@ -306,6 +378,8 @@ function populateContributions() {
     userSection.appendChild(datesList);
     contribList.appendChild(userSection);
   });
+  
+  console.log('Contributions populated successfully');
 }
 
 // ===== CHANGES VIEW =====

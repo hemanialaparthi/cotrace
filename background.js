@@ -83,8 +83,9 @@ async function fetchRevisions(fileId) {
   }
 
   try {
+    // Try to get all revision fields with user information
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}/revisions`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}/revisions?fields=*`,
       {
         headers: {
           "Authorization": "Bearer " + authToken
@@ -94,10 +95,20 @@ async function fetchRevisions(fileId) {
     
     if (!res.ok) {
       console.error("API Error:", res.status);
+      const errorBody = await res.text();
+      console.error("Error body:", errorBody);
       return null;
     }
     
-    return res.json();
+    const data = await res.json();
+    console.log('Raw API response:', data);
+    
+    // Log first revision to see what fields are available
+    if (data.revisions && data.revisions.length > 0) {
+      console.log('First revision object:', data.revisions[0]);
+    }
+    
+    return data;
   } catch (error) {
     console.error("Fetch error:", error);
     return null;
