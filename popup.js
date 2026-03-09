@@ -1,5 +1,96 @@
 let activeFile = null;
 
+// Toast notification helper
+function showToast(message, isError = false) {
+  const toast = document.getElementById('toast-notification');
+  const toastMessage = document.getElementById('toast-message');
+  
+  toastMessage.innerText = message;
+  toast.classList.remove('hidden');
+  
+  if (isError) {
+    toast.classList.add('error');
+  } else {
+    toast.classList.remove('error');
+  }
+  
+  // Auto-hide after 3 seconds
+  setTimeout(() => {
+    toast.classList.add('hidden');
+  }, 3000);
+}
+
+// Auth UI Elements
+const authElements = {
+  notLoggedIn: document.getElementById('not-logged-in'),
+  loggedIn: document.getElementById('logged-in'),
+  profileName: document.getElementById('profileName'),
+  profileEmail: document.getElementById('profileEmail'),
+  loginBtn: document.getElementById('loginBtn'),
+  logoutBtn: document.getElementById('logoutBtn'),
+};
+
+// Initialize auth state on popup load
+function initializeAuthState() {
+  chrome.storage.local.get(['authUser'], (result) => {
+    if (result.authUser) {
+      showLoggedInState(result.authUser);
+    } else {
+      showLoggedOutState();
+    }
+  });
+}
+
+function showLoggedInState(user) {
+  authElements.notLoggedIn.classList.add('hidden');
+  authElements.loggedIn.classList.remove('hidden');
+  authElements.profileName.innerText = user.name || 'User';
+  authElements.profileEmail.innerText = user.email || 'No email';
+}
+
+function showLoggedOutState() {
+  authElements.notLoggedIn.classList.remove('hidden');
+  authElements.loggedIn.classList.add('hidden');
+}
+
+// Handle login
+authElements.loginBtn.addEventListener('click', () => {
+  showToast('Opening Google sign-in...');
+  
+  chrome.runtime.sendMessage({ action: 'AUTH' }, (res) => {
+    if (res?.success) {
+      // Fetch user info after successful auth
+      chrome.runtime.sendMessage({ action: 'GET_USER_INFO' }, (userRes) => {
+        if (userRes?.user) {
+          chrome.storage.local.set({ authUser: userRes.user }, () => {
+            showLoggedInState(userRes.user);
+            showToast(`✓ Signed in as ${userRes.user.name}!`);
+          });
+        } else {
+          showToast('Failed to get user info', true);
+        }
+      });
+    } else {
+      showToast('Sign-in failed', true);
+    }
+  });
+});
+
+// Handle logout
+authElements.logoutBtn.addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'LOGOUT' }, (res) => {
+    if (res?.success) {
+      chrome.storage.local.remove('authUser', () => {
+        showLoggedOutState();
+        showToast('✓ Signed out successfully!');
+      });
+    } else {
+      showToast('Sign-out failed', true);
+    }
+  });
+});
+
+// Load active file
 chrome.storage.local.get(["activeFile"], (data) => {
   if (data.activeFile) {
     activeFile = data.activeFile;
@@ -8,13 +99,8 @@ chrome.storage.local.get(["activeFile"], (data) => {
   }
 });
 
-document.getElementById("loginBtn").addEventListener("click", () => {
-  chrome.runtime.sendMessage({ action: "AUTH" }, (res) => {
-    if (res?.success) {
-      console.log("Connected to Google.");
-    }
-  });
-});
+// Initialize auth state when popup opens
+initializeAuthState();
 
 document.getElementById("analyzeBtn").addEventListener("click", () => {
   if (!activeFile) {

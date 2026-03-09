@@ -19,7 +19,23 @@
     </div>
 
     <div class="card">
-      <button id="loginBtn" class = "button__haptic">Connect Google</button>
+      <!-- Auth Section -->
+      <div id="auth-section">
+        <!-- Not logged in state -->
+        <div id="not-logged-in" class="auth-state">
+          <button id="loginBtn" class="button__haptic">Connect Google</button>
+        </div>
+        
+        <!-- Logged in state -->
+        <div id="logged-in" class="auth-state hidden">
+          <div class="profile-info">
+            <p class="profile-name" id="profileName">-</p>
+            <p class="profile-email" id="profileEmail">-</p>
+          </div>
+          <button id="logoutBtn" class="secondary">Sign Out</button>
+        </div>
+      </div>
+      
       <button id="analyzeBtn" class="secondary">Analyze File</button>
     </div>
 
@@ -60,6 +76,11 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast-notification" class="toast hidden">
+    <p id="toast-message"></p>
   </div>
 
   <script src="popup.js"></script>

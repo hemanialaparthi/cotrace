@@ -150,3 +150,73 @@ button.secondary {
 #close-summary-btn:hover {
   background: #777;
 }
+
+/* Auth Section Styles */
+.auth-state {
+  margin-bottom: 8px;
+}
+
+.auth-state.hidden {
+  display: none !important;
+}
+
+.profile-info {
+  background: #f0f4ff;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  border-left: 4px solid #4f46e5;
+}
+
+.profile-name {
+  font-weight: 600;
+  font-size: 13px;
+  margin: 4px 0;
+  color: #333;
+}
+
+.profile-email {
+  font-size: 11px;
+  color: #666;
+  margin: 4px 0;
+}
+
+#logoutBtn {
+  background: #ef4444;
+}
+
+#logoutBtn:hover {
+  background: #dc2626;
+}
+
+/* Toast Notification Styles */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #10b981;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+  max-width: 300px;
+}
+
+.toast.error {
+  background: #ef4444;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
