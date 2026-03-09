@@ -28,10 +28,10 @@
     ]
   },
   "action": {
-    "default_popup": "popup2.html"
+    "default_popup": "popup2-new.html"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background-new.js"
   },
   "content_scripts": [
     {
