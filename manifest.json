@@ -40,7 +40,9 @@
         "https://docs.google.com/spreadsheets/*",
         "https://docs.google.com/presentation/*"
       ],
-      "js": ["content.js"]
+      "js": [
+        "content.js"
+      ]
     }
   ]
 }

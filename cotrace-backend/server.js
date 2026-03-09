@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const markdown = require('markdown-it');
 
 const app = express();
 app.use(cors());
@@ -51,8 +52,8 @@ app.post("/summarize", async (req, res) => {
         }
       }
     );
-
-    res.json({ success: true, summary: response.data.content[0].text });
+    md = new markdown();
+    res.json({ success: true, summary: md.render(response.data.content[0].text) });
   } catch (error) {
     console.error(error.response?.data || error.message);
     res.status(500).json({ error: "Failed to summarize", details: error.message });

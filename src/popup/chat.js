@@ -63,7 +63,7 @@ function addUserMessage(text) {
 function addSystemMessage(text) {
   const msgDiv = document.createElement('div');
   msgDiv.className = 'chat-message system';
-  msgDiv.textContent = text;
+  msgDiv.innerHTML = marked.parse(text);
   chatMessagesContainer.appendChild(msgDiv);
   scrollToBottom();
 }
