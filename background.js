@@ -1,6 +1,21 @@
 let authToken = null;
 let currentUser = null;
 
+// Restore auth state from storage
+async function restoreAuthState() {
+  const result = await chrome.storage.local.get(['authToken', 'authUser']);
+  if (result.authToken && result.authUser) {
+    authToken = result.authToken;
+    currentUser = result.authUser;
+    console.log('✓ Auth state restored for:', currentUser?.email);
+    return true;
+  }
+  return false;
+}
+
+// Restore auth immediately when service worker starts
+restoreAuthState();
+
 // Track active tab changes
 chrome.tabs.onActivated.addListener((activeInfo) => {
   chrome.tabs.get(activeInfo.tabId, (tab) => {
@@ -138,23 +153,13 @@ function fetchAndStoreUserInfo(sendResponse) {
 }
 
 // Check authentication on startup
-chrome.runtime.onStartup.addListener(async () => {
-  const result = await chrome.storage.local.get(['authToken', 'authUser']);
-  if (result.authToken) {
-    authToken = result.authToken;
-    currentUser = result.authUser;
-    console.log('Restored auth session for:', currentUser?.email);
-  }
+chrome.runtime.onStartup.addListener(() => {
+  restoreAuthState();
 });
 
 // Check authentication when extension is installed/updated
-chrome.runtime.onInstalled.addListener(async () => {
-  const result = await chrome.storage.local.get(['authToken', 'authUser']);
-  if (result.authToken) {
-    authToken = result.authToken;
-    currentUser = result.authUser;
-    console.log('Auth available for:', currentUser?.email);
-  }
+chrome.runtime.onInstalled.addListener(() => {
+  restoreAuthState();
 });
 
 async function getUserInfo(sendResponse) {
@@ -364,21 +369,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === "GET_USER_INFO") {
-    // Return cached user if available
-    if (currentUser) {
-      sendResponse({ success: true, user: currentUser });
+    // Restore auth state first if needed
+    if (!currentUser) {
+      restoreAuthState().then(() => {
+        if (currentUser) {
+          sendResponse({ success: true, user: currentUser });
+        } else {
+          getUserInfo(sendResponse);
+        }
+      });
     } else {
-      getUserInfo(sendResponse);
+      sendResponse({ success: true, user: currentUser });
     }
     return true;
   }
 
   if (msg.action === "CHECK_AUTH") {
-    // Quick check if user is authenticated
-    sendResponse({ 
-      authenticated: !!authToken && !!currentUser,
-      user: currentUser
-    });
+    // Ensure auth state is restored from storage before checking
+    if (!authToken || !currentUser) {
+      restoreAuthState().then(() => {
+        sendResponse({ 
+          authenticated: !!authToken && !!currentUser,
+          user: currentUser
+        });
+      });
+    } else {
+      sendResponse({ 
+        authenticated: !!authToken && !!currentUser,
+        user: currentUser
+      });
+    }
     return true;
   }
 
@@ -390,10 +410,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "FETCH_DATA") {
     const { fileId } = msg;
 
-    Promise.all([
-      fetchFileMetadata(fileId),
-      fetchRevisions(fileId)
-    ]).then(([meta, revisions]) => {
+    // Ensure auth state is restored before fetching data
+    restoreAuthState().then(() => {
+      return Promise.all([
+        fetchFileMetadata(fileId),
+        fetchRevisions(fileId)
+      ]);
+    }).then(([meta, revisions]) => {
       sendResponse({ meta, revisions });
     }).catch((error) => {
       console.error("Error fetching data:", error);
@@ -406,7 +429,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "FETCH_REVISION_CONTENT") {
     const { fileId, revisionId } = msg;
 
-    fetchRevisionContent(fileId, revisionId).then((content) => {
+    // Ensure auth state is restored before fetching
+    restoreAuthState().then(() => {
+      return fetchRevisionContent(fileId, revisionId);
+    }).then((content) => {
       sendResponse({ content });
     }).catch((error) => {
       console.error("Error fetching revision content:", error);
