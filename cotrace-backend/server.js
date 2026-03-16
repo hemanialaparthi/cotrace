@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const markdown = require('markdown-it');
+const { createPatch } = require('diff');
 
 const app = express();
 app.use(cors());
@@ -60,32 +61,169 @@ app.post("/summarize", async (req, res) => {
   }
 });
 
+// Fetch actual content from a revision using Google Drive API
+async function fetchRevisionContentFromGoogle(fileId, revisionId, authToken) {
+  try {
+    console.log(`[FETCH] Fetching content for revision ${revisionId}`);
+    
+    // Get revision metadata to find export links
+    const revisionRes = await axios.get(
+      `https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${revisionId}?fields=*`,
+      {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      }
+    );
+
+    const revisionData = revisionRes.data;
+    console.log(`[FETCH] Revision ${revisionId} metadata:`, {
+      mimeType: revisionData.mimeType,
+      hasExportLinks: !!revisionData.exportLinks,
+      exportLinks: Object.keys(revisionData.exportLinks || {}),
+      hasWebContentLink: !!revisionData.webContentLink
+    });
+
+    const exportUrl = revisionData.exportLinks?.['text/plain'] || 
+                      revisionData.exportLinks?.['text/html'] ||
+                      revisionData.webContentLink;
+
+    if (!exportUrl) {
+      console.log(`[FETCH] ✗ No export link available for revision ${revisionId}`);
+      return null;
+    }
+
+    console.log(`[FETCH] Using export URL for revision ${revisionId}: ${exportUrl.substring(0, 80)}...`);
+
+    // Fetch the actual content
+    const contentRes = await axios.get(exportUrl, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`
+      }
+    });
+
+    console.log(`[FETCH] ✓ Successfully fetched ${contentRes.data.length} chars for revision ${revisionId}`);
+    return contentRes.data;
+  } catch (error) {
+    console.error(`[FETCH] ✗ Error fetching revision ${revisionId}:`, error.message);
+    if (error.response?.status) {
+      console.error(`[FETCH] HTTP Status: ${error.response.status}`);
+    }
+    return null;
+  }
+}
+
 // New endpoint for natural language queries about changes
 app.post("/query-changes", async (req, res) => {
   try {
-    const { query, fileId, fileTitle, fileType, revisions } = req.body;
+    const { query, fileId, fileTitle, fileType, revisions, authToken } = req.body;
 
-    if (!query || !revisions) {
-      return res.status(400).json({ error: "Query and revisions are required" });
+    if (!query || !revisions || !authToken) {
+      return res.status(400).json({ error: "Query, revisions, and authToken are required" });
     }
 
-    // Filter revisions and prepare summary for AI
-    const revisionSummary = prepareRevisionSummary(revisions);
+    console.log(`[QUERY] Processing query: "${query}"`);
+    console.log(`[TOKEN] Auth token received (length: ${authToken.length})`);
+    console.log(`[REVISIONS] Raw revisions object structure:`, Object.keys(revisions));
+    console.log(`[REVISIONS] revisions.revisions type:`, typeof revisions.revisions);
+    console.log(`[REVISIONS] revisions.revisions count:`, revisions.revisions?.length);
+    console.log(`[REVISIONS] Total revisions received: ${revisions.revisions?.length || 0}`);
 
-    const systemPrompt = `You are an expert assistant analyzing document changes. You help users understand what changes were made to a document based on their queries. 
+    // Optimize: Only analyze recent revisions for performance
+    // For better performance, limit to last 20 revisions (most recent changes)
+    const REVISIONS_TO_ANALYZE = 20;
+    const revisionsToAnalyze = revisions.revisions.slice(0, REVISIONS_TO_ANALYZE);
+    console.log(`[QUERY] Analyzing ${revisionsToAnalyze.length} recent revisions (out of ${revisions.revisions.length} total) for performance`);
+    
+    // Fetch actual content for each revision (PARALLEL for speed)
+    console.log(`[FETCH] Starting parallel content fetch for ${revisionsToAnalyze.length} revisions...`);
+    const revisionContents = {};
+    const fetchPromises = revisionsToAnalyze.map(async (revision) => {
+      const content = await fetchRevisionContentFromGoogle(fileId, revision.id, authToken);
+      revisionContents[revision.id] = {
+        content: content || '[Content unavailable]',
+        date: revision.modifiedTime,
+        author: revision.lastModifyingUser?.displayName || 'Unknown'
+      };
+      
+      if (content) {
+        console.log(`[FETCH] ✓ Revision ${revision.id}: ${content.length} chars`);
+      } else {
+        console.log(`[FETCH] ✗ Revision ${revision.id}: content unavailable`);
+      }
+    });
+    
+    // Wait for all requests to complete
+    await Promise.all(fetchPromises);
+    console.log(`[FETCH] Parallel fetch complete for all ${revisionsToAnalyze.length} revisions`);
 
-The user is asking about changes to: "${fileTitle}" (${fileType})
+    // Generate diffs between consecutive revisions
+    const diffs = [];
+    const revisionIds = revisionsToAnalyze.map(r => r.id);
+    for (let i = 0; i < revisionIds.length - 1; i++) {
+      const newer = revisionContents[revisionIds[i]].content || '';
+      const older = revisionContents[revisionIds[i + 1]].content || '';
+      const diff = createPatch(
+        fileTitle,
+        older.toString(),
+        newer.toString(),
+        'Previous',
+        'Current'
+      );
+      diffs.push({
+        from: revisionIds[i + 1],
+        to: revisionIds[i],
+        date: revisionContents[revisionIds[i]].date,
+        author: revisionContents[revisionIds[i]].author,
+        diff: diff
+      });
+    }
 
-Here is the revision history data:
-${revisionSummary}
+    console.log(`[SUMMARY] Generated ${diffs.length} diffs from ${revisionsToAnalyze.length} revisions`);
+    const successCount = Object.values(revisionContents).filter(r => r.content !== '[Content unavailable]').length;
+    console.log(`[SUMMARY] Successfully fetched content for ${successCount}/${revisionsToAnalyze.length} revisions`);
 
-Based on this revision data, answer the user's question about changes. Be specific with dates, contributors, and what changed. If the user mentions a specific date, filter the results accordingly.`;
+    // Prepare detailed content summary for AI
+    const contentSummary = diffs.map(d => 
+      `\n=== Change on ${new Date(d.date).toLocaleString()} by ${d.author} ===\n${d.diff}`
+    ).join('\n');
+
+    // Improved system prompt with intelligent analysis guidance
+    const systemPrompt = `You are an expert document analyst. Your job is to help users understand documents by analyzing their change history.
+
+Document: "${fileTitle}" (${fileType})
+Total Revisions: ${revisions.revisions.length}
+Analyzing: ${revisionsToAnalyze.length} recent revisions
+
+ANALYSIS GUIDELINES:
+1. For questions about "what is this document about" or similar overview questions:
+   - Synthesize the content into 2-3 key themes/purposes
+   - Highlight the most important sections or recurring topics
+   - Provide a high-level executive summary (2-3 sentences max)
+   - Then list 3-5 main purposes/topics in bullet points
+   - Avoid listing every small detail
+
+2. For specific questions about changes, timelines, or contributors:
+   - Be precise with dates and names
+   - Show actual content changes with specific examples
+   - Highlight what was added, removed, or modified
+
+3. For all responses:
+   - Start with the most relevant/important information
+   - Use clear structure with headers
+   - Group related information together
+   - Avoid raw data dumps - synthesize and summarize
+
+Here are the content changes (diffs between consecutive versions):
+${contentSummary || 'No changes available'}
+
+Now answer the user's question based on this document history. Focus on intelligence and clarity over exhaustive detail.`;
 
     const response = await axios.post(
       "https://api.anthropic.com/v1/messages",
       {
         model: "claude-sonnet-4-5-20250929",
-        max_tokens: 800,
+        max_tokens: 2000,
         messages: [
           {
             role: "user",
@@ -104,30 +242,15 @@ Based on this revision data, answer the user's question about changes. Be specif
     );
 
     const answer = response.data.content[0].text;
+    console.log(`[SUMMARY] Query processed successfully`);
+    console.log(`[SUMMARY] Total revisions: ${revisions.revisions.length}, Analyzed: ${revisionsToAnalyze.length}, Diffs generated: ${diffs.length}`);
+    
     res.json({ success: true, answer });
   } catch (error) {
-    console.error(error.response?.data || error.message);
+    console.error(`[ERROR] Query processing failed:`, error.response?.data || error.message);
     res.status(500).json({ error: "Failed to process query", details: error.message });
   }
 });
-
-// Helper function to prepare revision data for AI analysis
-function prepareRevisionSummary(revisions) {
-  if (!revisions || !revisions.revisions || revisions.revisions.length === 0) {
-    return "No revision history available.";
-  }
-
-  const revisionList = revisions.revisions
-    .slice(0, 50) // Limit to last 50 revisions to avoid token limits
-    .map((rev, index) => {
-      const date = new Date(rev.modifiedTime).toLocaleString();
-      const author = rev.lastModifyingUser?.displayName || "Unknown";
-      return `${index + 1}. ${date} - Last modified by: ${author} (Revision ID: ${rev.id})`;
-    })
-    .join("\n");
-
-  return `Total revisions: ${revisions.revisions.length}\n\nRevision history (most recent first):\n${revisionList}`;
-}
 
 app.get("/", (req, res) => {
   res.send("CoTrace backend running");

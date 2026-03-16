@@ -99,16 +99,36 @@ async function processQuery(query) {
       return;
     }
 
-    // Fetch revisions if not already loaded
+    // Always fetch fresh revisions to get latest changes
+    const success = await fetchFileMetadata();
     const revisionHistory = getRevisionHistory();
-    if (!revisionHistory) {
-      const success = await fetchFileMetadata();
-      if (!success || !getRevisionHistory()) {
-        removeLoadingMessage();
-        addSystemMessage('Error: Could not load revision history. Please authenticate first by clicking the account button.');
-        return;
-      }
+    if (!success || !revisionHistory) {
+      removeLoadingMessage();
+      addSystemMessage('Error: Could not load revision history. Please authenticate first by clicking the account button.');
+      return;
     }
+
+    console.log(`[CHAT] Found ${revisionHistory.revisions?.length || 0} revisions to analyze`);
+
+    // Get auth token from storage
+    const authTokenData = await chrome.storage.local.get('authToken');
+    if (!authTokenData.authToken) {
+      removeLoadingMessage();
+      addSystemMessage('Error: Authentication token not found. Please sign in again.');
+      return;
+    }
+
+    // Prepare request payload
+    const requestPayload = {
+      query: query,
+      fileId: activeFile.id,
+      fileTitle: activeFile.title,
+      fileType: activeFile.type,
+      revisions: getRevisionHistory(),
+      authToken: authTokenData.authToken,
+    };
+    
+    console.log(`[CHAT] Sending request with ${requestPayload.revisions?.revisions?.length || 0} revisions to backend`);
 
     // Send query to backend for AI analysis
     const response = await fetch(`${BACKEND_URL}/query-changes`, {
@@ -116,13 +136,7 @@ async function processQuery(query) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        query: query,
-        fileId: activeFile.id,
-        fileTitle: activeFile.title,
-        fileType: activeFile.type,
-        revisions: getRevisionHistory(),
-      }),
+      body: JSON.stringify(requestPayload),
     });
 
     if (!response.ok) {

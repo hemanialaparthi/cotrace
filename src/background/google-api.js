@@ -38,32 +38,49 @@ async function fetchRevisions(fileId, authToken) {
   }
 
   try {
-    // Try to get all revision fields with user information
-    const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}/revisions?fields=*`,
-      {
-        headers: {
-          "Authorization": "Bearer " + authToken
+    let allRevisions = [];
+    let pageToken = null;
+    let pageCount = 0;
+
+    // Paginate through all revisions
+    do {
+      pageCount++;
+      const pageTokenParam = pageToken ? `&pageToken=${pageToken}` : '';
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}/revisions?fields=*${pageTokenParam}`,
+        {
+          headers: {
+            "Authorization": "Bearer " + authToken
+          }
         }
+      );
+      
+      if (!res.ok) {
+        console.error("API Error:", res.status);
+        const errorBody = await res.text();
+        console.error("Error body:", errorBody);
+        return null;
       }
-    );
-    
-    if (!res.ok) {
-      console.error("API Error:", res.status);
-      const errorBody = await res.text();
-      console.error("Error body:", errorBody);
-      return null;
-    }
-    
-    const data = await res.json();
-    console.log('Raw API response:', data);
+      
+      const data = await res.json();
+      console.log(`[FETCH] Page ${pageCount}: Got ${data.revisions?.length || 0} revisions`);
+      
+      if (data.revisions) {
+        allRevisions = allRevisions.concat(data.revisions);
+      }
+      
+      // Check if there are more pages
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+
+    console.log(`[FETCH] Total revisions fetched: ${allRevisions.length} across ${pageCount} pages`);
     
     // Log first revision to see what fields are available
-    if (data.revisions && data.revisions.length > 0) {
-      console.log('First revision object:', data.revisions[0]);
+    if (allRevisions.length > 0) {
+      console.log('First revision object:', allRevisions[0]);
     }
     
-    return data;
+    return { revisions: allRevisions };
   } catch (error) {
     console.error("Fetch error:", error);
     return null;
