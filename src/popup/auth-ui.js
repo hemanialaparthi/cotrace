@@ -23,7 +23,7 @@ async function checkAuthStatus() {
 
 // Update account button appearance based on auth state
 function updateAccountButton(authenticated, user = null) {
-  const accountBtn = document.querySelector('.icon-btn');
+  const accountBtn = document.querySelector('.account-btn');
   if (!accountBtn) return;
 
   if (authenticated && user) {
@@ -31,7 +31,7 @@ function updateAccountButton(authenticated, user = null) {
     if (user.picture) {
       accountBtn.innerHTML = `<img src="${user.picture}" alt="${user.name}" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;">`;
     }
-    accountBtn.title = `Signed in as ${user.name} (${user.email})\nClick to sign out`;
+    accountBtn.title = `Signed in as ${user.name} (${user.email})`;
     accountBtn.style.border = '2px solid var(--accent)';
     accountBtn.style.opacity = '1';
   } else {
@@ -47,29 +47,35 @@ function updateAccountButton(authenticated, user = null) {
 
 // Initialize authentication UI handlers
 function initAuthUI() {
-  const accountBtn = document.querySelector('.icon-btn');
+  const accountBtn = document.querySelector('.account-btn');
+  const settingsBtn = document.querySelector('.settings-btn');
+  const signOutBtn = document.querySelector('.sign-out-btn');
+
   if (accountBtn) {
     accountBtn.addEventListener('click', handleAuthButtonClick);
   }
+
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', handleSettingsButtonClick);
+  }
+
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', handleSignOut);
+  }
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', closeSettingsDropdown);
+  
+  console.log('Auth UI initialized:', {
+    accountBtn: !!accountBtn,
+    settingsBtn: !!settingsBtn,
+    signOutBtn: !!signOutBtn
+  });
 }
 
-// Handle account button click (login/logout)
+// Handle account button click (login only)
 function handleAuthButtonClick() {
-  if (isAuthenticated) {
-    // Logout
-    if (confirm('Are you sure you want to sign out?')) {
-      chrome.runtime.sendMessage({ action: 'LOGOUT' }, (res) => {
-        if (res?.success) {
-          isAuthenticated = false;
-          currentUser = null;
-          updateAccountButton(false);
-          // Successfully signed out - no chat message
-        } else {
-          console.error('Failed to sign out:', res?.error);
-        }
-      });
-    }
-  } else {
+  if (!isAuthenticated) {
     // Login - This will trigger Google's OAuth consent screen
     chrome.runtime.sendMessage({ action: 'AUTH' }, (res) => {
       console.log('AUTH response received:', res);
@@ -84,6 +90,53 @@ function handleAuthButtonClick() {
         // Successfully authenticated - no chat message
       } else {
         console.error('Auth failed with response:', res);
+      }
+    });
+  }
+}
+
+// Toggle settings dropdown
+function handleSettingsButtonClick(e) {
+  e.stopPropagation();
+  const dropdown = document.querySelector('.settings-dropdown');
+  if (dropdown) {
+    dropdown.classList.toggle('active');
+  }
+}
+
+// Close settings dropdown
+function closeSettingsDropdown(e) {
+  const dropdown = document.querySelector('.settings-dropdown');
+  const settingsBtn = document.querySelector('.settings-btn');
+  const container = document.querySelector('.settings-menu-container');
+  
+  if (dropdown && !container?.contains(e.target)) {
+    dropdown.classList.remove('active');
+  }
+}
+
+// Handle sign out
+function handleSignOut() {
+  console.log('handleSignOut called');
+  
+  // Close dropdown
+  const dropdown = document.querySelector('.settings-dropdown');
+  if (dropdown) {
+    dropdown.classList.remove('active');
+  }
+  
+  if (confirm('Are you sure you want to sign out?')) {
+    console.log('Confirming sign out...');
+    chrome.runtime.sendMessage({ action: 'LOGOUT' }, (res) => {
+      console.log('Sign out response:', res);
+      if (res?.success) {
+        isAuthenticated = false;
+        currentUser = null;
+        updateAccountButton(false);
+        // Successfully signed out - no chat message
+        console.log('Successfully signed out');
+      } else {
+        console.error('Failed to sign out:', res?.error);
       }
     });
   }

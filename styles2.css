@@ -60,6 +60,63 @@ body {
 .icon-btn:hover { background: var(--pill-bg); }
 .icon-btn svg { width: 18px; height: 18px; }
 
+/* Settings Menu Dropdown */
+.settings-menu-container {
+  position: relative;
+}
+
+.settings-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  min-width: 140px;
+  display: none;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 4px;
+  z-index: 1000;
+}
+
+.settings-dropdown.active {
+  display: flex;
+}
+
+.dropdown-item {
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dropdown-item:first-child {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.dropdown-item:last-child {
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.dropdown-item:hover {
+  background: var(--pill-bg);
+}
+
+.dropdown-item.sign-out-btn {
+  color: #d32f2f;
+}
+
+.dropdown-item.sign-out-btn:hover {
+  background: rgba(211, 47, 47, 0.1);
+}
+
 /* Tabs */
 .tabs {
   display: flex;
