@@ -39,8 +39,8 @@ function switchTab(targetId, tabElement) {
   }
 }
 
-// Handle changes tab activation (placeholder for future implementation)
+// Handle changes tab activation
 function handleChangesTab() {
-  // TODO: Implement changes view functionality
-  console.log('Changes tab activated');
+  console.log('[CHANGES] Changes tab activated');
+  initChangesTab();
 }

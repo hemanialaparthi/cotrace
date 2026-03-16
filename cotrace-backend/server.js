@@ -252,6 +252,142 @@ Now answer the user's question based on this document history. Focus on intellig
   }
 });
 
+// New endpoint for comparing two specific versions
+app.post("/compare-versions", async (req, res) => {
+  try {
+    const { fileId, fileTitle, revisions, version1Id, version2Id, authToken } = req.body;
+
+    if (!fileId || !version1Id || !version2Id || !authToken) {
+      return res.status(400).json({ error: "fileId, version1Id, version2Id, and authToken are required" });
+    }
+
+    console.log(`[COMPARE] Comparing versions: ${version1Id} -> ${version2Id}`);
+
+    // Fetch content for both versions
+    console.log(`[COMPARE] Fetching content for version 1: ${version1Id}`);
+    const content1 = await fetchRevisionContentFromGoogle(fileId, version1Id, authToken);
+    
+    console.log(`[COMPARE] Fetching content for version 2: ${version2Id}`);
+    const content2 = await fetchRevisionContentFromGoogle(fileId, version2Id, authToken);
+
+    if (!content1 && !content2) {
+      return res.status(500).json({ error: "Could not fetch content for either version" });
+    }
+
+    // Generate unified diff
+    const diff = createPatch(
+      fileTitle,
+      content1 || '',
+      content2 || '',
+      'Earlier Version',
+      'Latest Version'
+    );
+
+    // Calculate statistics
+    const diffLines = diff.split('\n');
+    let additions = 0;
+    let deletions = 0;
+
+    diffLines.forEach(line => {
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        additions++;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        deletions++;
+      }
+    });
+
+    const totalChanges = additions + deletions;
+
+    console.log(`[COMPARE] Diff stats - Additions: ${additions}, Deletions: ${deletions}, Total: ${totalChanges}`);
+
+    // Generate AI summary of changes
+    const summary = await generateChangesSummary(
+      fileTitle,
+      content1 || '[Content unavailable]',
+      content2 || '[Content unavailable]',
+      diff,
+      additions,
+      deletions
+    );
+
+    console.log(`[COMPARE] Generated AI summary successfully`);
+
+    res.json({
+      success: true,
+      diff: diff,
+      stats: {
+        additions,
+        deletions,
+        totalChanges
+      },
+      summary: summary
+    });
+  } catch (error) {
+    console.error(`[COMPARE] Error:`, error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to compare versions", details: error.message });
+  }
+});
+
+// Generate AI summary of changes between two versions
+async function generateChangesSummary(fileTitle, content1, content2, diff, additions, deletions) {
+  try {
+    const systemPrompt = `You are an expert document analyst specializing in summarizing changes between document versions. Your task is to provide a clear, concise summary of what changed between an earlier version and a latest version of a document.
+
+Focus on:
+1. Main topics or sections that were added, removed, or significantly modified
+2. Key insights about the nature of changes (restructuring, expansion, clarification, deletion, etc.)
+3. Any notable patterns or trends in the edits
+
+Be concise and specific - avoid listing every single change. Instead, synthesize information to highlight the most important modifications.`;
+
+    const userPrompt = `Compare these two versions of "${fileTitle}" and summarize the changes:
+
+EARLIER VERSION:
+${content1.substring(0, 2000)}${content1.length > 2000 ? '\n... (content truncated) ...' : ''}
+
+LATEST VERSION:
+${content2.substring(0, 2000)}${content2.length > 2000 ? '\n... (content truncated) ...' : ''}
+
+UNIFIED DIFF:
+${diff.substring(0, 1500)}${diff.length > 1500 ? '\n... (diff truncated) ...' : ''}
+
+CHANGE STATISTICS:
+- Additions: ${additions} lines
+- Deletions: ${deletions} lines
+- Total Changes: ${additions + deletions} lines
+
+Provide a brief, clear summary of what changed. Focus on high-level changes and key modifications.`;
+
+    const response = await axios.post(
+      "https://api.anthropic.com/v1/messages",
+      {
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 500,
+        messages: [
+          {
+            role: "user",
+            content: userPrompt
+          }
+        ],
+        system: systemPrompt
+      },
+      {
+        headers: {
+          "x-api-key": process.env.CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    return response.data.content[0].text;
+  } catch (error) {
+    console.error(`[COMPARE] Failed to generate summary:`, error.message);
+    // Return a fallback summary if AI fails
+    return `Unable to generate AI summary. However, the comparison shows **${additions} additions** and **${deletions} deletions** between the two versions.`;
+  }
+}
+
 app.get("/", (req, res) => {
   res.send("CoTrace backend running");
 });

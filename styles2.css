@@ -319,7 +319,28 @@ body {
 .diff-output {
   background: var(--input-bg);
   border-radius: var(--radius-sm);
-  min-height: 200px;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  min-height: 0;
+}
+
+.diff-output::-webkit-scrollbar {
+  width: 8px;
+}
+
+.diff-output::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.diff-output::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.diff-output::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 /* Chat Styles */
