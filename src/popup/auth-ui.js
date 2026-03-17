@@ -50,6 +50,7 @@ function initAuthUI() {
   const accountBtn = document.querySelector('.account-btn');
   const settingsBtn = document.querySelector('.settings-btn');
   const signOutBtn = document.querySelector('.sign-out-btn');
+  const clearChatBtn = document.querySelector('.clear-chat-btn');
 
   if (accountBtn) {
     accountBtn.addEventListener('click', handleAuthButtonClick);
@@ -63,13 +64,18 @@ function initAuthUI() {
     signOutBtn.addEventListener('click', handleSignOut);
   }
 
+  if (clearChatBtn) {
+    clearChatBtn.addEventListener('click', handleClearChat);
+  }
+
   // Close dropdown when clicking outside
   document.addEventListener('click', closeSettingsDropdown);
   
   console.log('Auth UI initialized:', {
     accountBtn: !!accountBtn,
     settingsBtn: !!settingsBtn,
-    signOutBtn: !!signOutBtn
+    signOutBtn: !!signOutBtn,
+    clearChatBtn: !!clearChatBtn
   });
 }
 
@@ -139,6 +145,21 @@ function handleSignOut() {
         console.error('Failed to sign out:', res?.error);
       }
     });
+  }
+}
+
+// Handle clear chat history
+function handleClearChat() {
+  console.log('handleClearChat called');
+  
+  // Close dropdown
+  const dropdown = document.querySelector('.settings-dropdown');
+  if (dropdown) {
+    dropdown.classList.remove('active');
+  }
+  
+  if (confirm('Are you sure you want to clear the chat history for this document?')) {
+    clearChatHistory();
   }
 }
 

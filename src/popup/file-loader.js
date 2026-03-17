@@ -5,18 +5,29 @@ let activeFile = null;
 let fileMetadata = null;
 let revisionHistory = null;
 
-// Load active file from storage
+// Load active file from storage (returns a Promise)
 function loadActiveFile() {
-  chrome.storage.local.get(['activeFile'], (data) => {
-    if (data.activeFile) {
-      activeFile = data.activeFile;
-      addSystemMessage(`Document loaded: "${activeFile.title}". What would you like to know about the changes?`);
-      // Optionally pre-fetch file metadata for faster queries
-      // Not auto-fetching to save API calls
-    } else {
-      addSystemMessage('No document detected. Please open a Google Doc, Sheet, or Slide to use CoTrace.');
-    }
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['activeFile'], (data) => {
+      if (data.activeFile) {
+        activeFile = data.activeFile;
+        console.log(`[FILE] Loaded active file: "${activeFile.title}" (${activeFile.id})`);
+        resolve(true);
+      } else {
+        console.log('[FILE] No active file found');
+        resolve(false);
+      }
+    });
   });
+}
+
+// Show welcome message after file is loaded (call this after UI is initialized)
+function showFileLoadedMessage() {
+  if (activeFile) {
+    addSystemMessage(`Document loaded: "${activeFile.title}". What would you like to know about the changes?`);
+  } else {
+    addSystemMessage('No document detected. Please open a Google Doc, Sheet, or Slide to use CoTrace.');
+  }
 }
 
 // Fetch file metadata and revisions

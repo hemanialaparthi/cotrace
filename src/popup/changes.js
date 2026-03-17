@@ -72,6 +72,9 @@ function populateVersionSelects() {
   versionSelects.forEach((select, idx) => {
     select.innerHTML = `<option value="" disabled selected>Select version ${idx + 1}</option>${optionsHtml}`;
   });
+  
+  // Clear loading message after versions are populated
+  diffOutput.innerHTML = '';
 }
 
 // Handle analyze button click

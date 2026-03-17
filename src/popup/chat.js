@@ -9,7 +9,7 @@ let chatInput;
 let sendBtn;
 
 // Initialize chat UI
-function initChatUI() {
+async function initChatUI() {
   chatMessagesContainer = document.querySelector('.chat-messages');
   chatInput = document.querySelector('.chat-input');
   sendBtn = document.querySelector('.send-btn');
@@ -30,6 +30,10 @@ function initChatUI() {
 
   // Add dynamic styles for chat messages
   addChatStyles();
+
+  // Load previous chat history for this file
+  const hadPreviousChat = await loadChatHistory();
+  return hadPreviousChat;
 }
 
 // Send a message
@@ -56,6 +60,7 @@ function addUserMessage(text) {
   msgDiv.className = 'chat-message user';
   msgDiv.textContent = text;
   chatMessagesContainer.appendChild(msgDiv);
+  saveChatMessage('user', text).catch(err => console.error('[CHAT] Error saving user message:', err));
   scrollToBottom();
 }
 
@@ -65,6 +70,7 @@ function addSystemMessage(text) {
   msgDiv.className = 'chat-message system';
   msgDiv.innerHTML = marked.parse(text);
   chatMessagesContainer.appendChild(msgDiv);
+  saveChatMessage('system', text).catch(err => console.error('[CHAT] Error saving system message:', err));
   scrollToBottom();
 }
 
@@ -208,4 +214,78 @@ function addChatStyles() {
     }
   `;
   document.head.appendChild(style);
+}
+
+// Generate storage key for chat history based on active file
+function getChatStorageKey() {
+  const activeFile = getActiveFile();
+  if (!activeFile || !activeFile.id) {
+    return 'chat-history-default';
+  }
+  return `chat-history-${activeFile.id}`;
+}
+
+// Load chat history from storage
+async function loadChatHistory() {
+  try {
+    const storageKey = getChatStorageKey();
+    const data = await chrome.storage.local.get(storageKey);
+    const messages = data[storageKey] || [];
+    
+    // Clear existing messages
+    chatMessagesContainer.innerHTML = '';
+    
+    // Restore messages from storage
+    messages.forEach(msg => {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `chat-message ${msg.type}`;
+      
+      if (msg.type === 'system') {
+        msgDiv.innerHTML = marked.parse(msg.text);
+      } else {
+        msgDiv.textContent = msg.text;
+      }
+      
+      chatMessagesContainer.appendChild(msgDiv);
+    });
+    
+    scrollToBottom();
+    console.log(`[CHAT] Loaded ${messages.length} messages from storage`);
+    
+    // Return true if messages were loaded from storage
+    return messages.length > 0;
+  } catch (error) {
+    console.error('[CHAT] Error loading history:', error);
+    return false;
+  }
+}
+
+// Save chat message to storage
+async function saveChatMessage(type, text) {
+  try {
+    const storageKey = getChatStorageKey();
+    const data = await chrome.storage.local.get(storageKey);
+    const messages = data[storageKey] || [];
+    
+    // Add new message
+    messages.push({ type, text });
+    
+    // Save back to storage
+    await chrome.storage.local.set({ [storageKey]: messages });
+    console.log(`[CHAT] Saved message to storage (total: ${messages.length})`);
+  } catch (error) {
+    console.error('[CHAT] Error saving message:', error);
+  }
+}
+
+// Clear chat history for current file
+async function clearChatHistory() {
+  try {
+    const storageKey = getChatStorageKey();
+    await chrome.storage.local.remove(storageKey);
+    chatMessagesContainer.innerHTML = '';
+    console.log('[CHAT] Chat history cleared');
+  } catch (error) {
+    console.error('[CHAT] Error clearing history:', error);
+  }
 }

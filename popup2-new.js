@@ -8,19 +8,24 @@ if (document.readyState === 'loading') {
   initializePopup();
 }
 
-function initializePopup() {
+async function initializePopup() {
   console.log('Initializing Cotrace popup...');
+  
+  // Load active file FIRST so we have the file context
+  await loadActiveFile();
   
   // Initialize all modules
   initAuthUI();
-  initChatUI();
+  const hadPreviousChat = await initChatUI();  // Load chat history
   initTabs();
+  
+  // Show welcome message only if no previous chat history
+  if (!hadPreviousChat) {
+    showFileLoadedMessage();
+  }
   
   // Check authentication status
   checkAuthStatus();
-  
-  // Load active file
-  loadActiveFile();
   
   console.log('Cotrace popup initialized successfully');
 }
