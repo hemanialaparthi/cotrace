@@ -9,6 +9,84 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Helper function to stream Claude API responses
+async function streamClaudeResponse(systemPrompt, userMessage, res) {
+  try {
+    const response = await axios.post(
+      "https://api.anthropic.com/v1/messages",
+      {
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 2000,
+        stream: true,
+        messages: [
+          {
+            role: "user",
+            content: userMessage
+          }
+        ],
+        system: systemPrompt
+      },
+      {
+        headers: {
+          "x-api-key": process.env.CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json"
+        },
+        responseType: 'stream'
+      }
+    );
+
+    // Set response headers for streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Handle the stream
+    response.data.on('data', (chunk) => {
+      const lines = chunk.toString().split('\n');
+      
+      lines.forEach((line) => {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            // Send content_block_delta events
+            if (data.type === 'content_block_delta') {
+              const delta = data.delta;
+              if (delta.type === 'text_delta' && delta.text) {
+                // Send the text chunk as an SSE message
+                res.write(`data: ${JSON.stringify({ text: delta.text })}\n\n`);
+              }
+            }
+            // Send message_stop event to signal end
+            else if (data.type === 'message_stop') {
+              res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            }
+          } catch (e) {
+            console.error('Error parsing streaming data:', e);
+          }
+        }
+      });
+    });
+
+    response.data.on('end', () => {
+      if (!res.writableEnded) {
+        res.end();
+      }
+    });
+
+    response.data.on('error', (error) => {
+      console.error('Stream error:', error);
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+      res.end();
+    });
+  } catch (error) {
+    console.error('Streaming error:', error.message);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
+  }
+}
+
 app.post("/summarize", async (req, res) => {
   try {
     const { content, type } = req.body;
@@ -112,6 +190,108 @@ async function fetchRevisionContentFromGoogle(fileId, revisionId, authToken) {
     return null;
   }
 }
+
+// New endpoint for natural language queries about changes (STREAMING)
+app.post("/query-changes-stream", async (req, res) => {
+  try {
+    const { query, fileId, fileTitle, fileType, revisions, authToken } = req.body;
+
+    if (!query || !revisions || !authToken) {
+      return res.status(400).json({ error: "Query, revisions, and authToken are required" });
+    }
+
+    console.log(`[QUERY-STREAM] Processing query: "${query}"`);
+    console.log(`[TOKEN] Auth token received (length: ${authToken.length})`);
+    console.log(`[REVISIONS] Total revisions received: ${revisions.revisions?.length || 0}`);
+
+    // Optimize: Only analyze recent revisions for performance
+    const REVISIONS_TO_ANALYZE = 20;
+    const revisionsToAnalyze = revisions.revisions.slice(0, REVISIONS_TO_ANALYZE);
+    console.log(`[QUERY-STREAM] Analyzing ${revisionsToAnalyze.length} recent revisions (out of ${revisions.revisions.length} total)`);
+    
+    // Fetch actual content for each revision (PARALLEL for speed)
+    console.log(`[FETCH] Starting parallel content fetch for ${revisionsToAnalyze.length} revisions...`);
+    const revisionContents = {};
+    const fetchPromises = revisionsToAnalyze.map(async (revision) => {
+      const content = await fetchRevisionContentFromGoogle(fileId, revision.id, authToken);
+      revisionContents[revision.id] = {
+        content: content || '[Content unavailable]',
+        date: revision.modifiedTime,
+        author: revision.lastModifyingUser?.displayName || 'Unknown'
+      };
+    });
+    
+    // Wait for all requests to complete
+    await Promise.all(fetchPromises);
+    console.log(`[FETCH] Parallel fetch complete for all ${revisionsToAnalyze.length} revisions`);
+
+    // Generate diffs between consecutive revisions
+    const diffs = [];
+    const revisionIds = revisionsToAnalyze.map(r => r.id);
+    for (let i = 0; i < revisionIds.length - 1; i++) {
+      const newer = revisionContents[revisionIds[i]].content || '';
+      const older = revisionContents[revisionIds[i + 1]].content || '';
+      const diff = createPatch(
+        fileTitle,
+        older.toString(),
+        newer.toString(),
+        'Previous',
+        'Current'
+      );
+      diffs.push({
+        from: revisionIds[i + 1],
+        to: revisionIds[i],
+        date: revisionContents[revisionIds[i]].date,
+        author: revisionContents[revisionIds[i]].author,
+        diff: diff
+      });
+    }
+
+    console.log(`[SUMMARY] Generated ${diffs.length} diffs from ${revisionsToAnalyze.length} revisions`);
+
+    // Prepare detailed content summary for AI
+    const contentSummary = diffs.map(d => 
+      `\n=== Change on ${new Date(d.date).toLocaleString()} by ${d.author} ===\n${d.diff}`
+    ).join('\n');
+
+    // Improved system prompt with intelligent analysis guidance
+    const systemPrompt = `You are an expert document analyst. Your job is to help users understand documents by analyzing their change history.
+
+Document: "${fileTitle}" (${fileType})
+Total Revisions: ${revisions.revisions.length}
+Analyzing: ${revisionsToAnalyze.length} recent revisions
+
+ANALYSIS GUIDELINES:
+1. For questions about "what is this document about" or similar overview questions:
+   - Synthesize the content into 2-3 key themes/purposes
+   - Highlight the most important sections or recurring topics
+   - Provide a high-level executive summary (2-3 sentences max)
+   - Then list 3-5 main purposes/topics in bullet points
+   - Avoid listing every small detail
+
+2. For specific questions about changes, timelines, or contributors:
+   - Be precise with dates and names
+   - Show actual content changes with specific examples
+   - Highlight what was added, removed, or modified
+
+3. For all responses:
+   - Start with the most relevant/important information
+   - Use clear structure with headers
+   - Group related information together
+   - Avoid raw data dumps - synthesize and summarize
+
+Here are the content changes (diffs between consecutive versions):
+${contentSummary || 'No changes available'}
+
+Now answer the user's question based on this document history. Focus on intelligence and clarity over exhaustive detail.`;
+
+    // Stream the response from Claude
+    await streamClaudeResponse(systemPrompt, query, res);
+  } catch (error) {
+    console.error(`[ERROR] Query streaming failed:`, error.message);
+    res.status(500).json({ error: "Failed to process query", details: error.message });
+  }
+});
 
 // New endpoint for natural language queries about changes
 app.post("/query-changes", async (req, res) => {

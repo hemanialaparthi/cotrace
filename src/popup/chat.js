@@ -47,9 +47,6 @@ function sendMessage() {
   // Add user message to chat
   addUserMessage(message);
 
-  // Show loading indicator
-  addLoadingMessage();
-
   // Process the query
   processQuery(message);
 }
@@ -74,33 +71,22 @@ function addSystemMessage(text) {
   scrollToBottom();
 }
 
-// Add loading message
-function addLoadingMessage() {
+// Add streaming system message (for receiving streamed text)
+function addStreamingSystemMessage() {
   const msgDiv = document.createElement('div');
-  msgDiv.className = 'chat-message loading';
-  msgDiv.id = 'loading-msg';
-  msgDiv.innerHTML = '<span class="spinner"></span> Processing...';
+  msgDiv.className = 'chat-message system';
+  msgDiv.id = 'streaming-msg';
+  msgDiv.innerHTML = '';
   chatMessagesContainer.appendChild(msgDiv);
   scrollToBottom();
+  return msgDiv;
 }
 
-// Remove loading message
-function removeLoadingMessage() {
-  const loadingMsg = document.getElementById('loading-msg');
-  if (loadingMsg) loadingMsg.remove();
-}
-
-// Scroll chat to bottom
-function scrollToBottom() {
-  chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-}
-
-// Process user query
+// Process user query with streaming
 async function processQuery(query) {
   try {
     const activeFile = getActiveFile();
     if (!activeFile) {
-      removeLoadingMessage();
       addSystemMessage('Error: No active file detected. Please open a document first.');
       return;
     }
@@ -109,7 +95,6 @@ async function processQuery(query) {
     const success = await fetchFileMetadata();
     const revisionHistory = getRevisionHistory();
     if (!success || !revisionHistory) {
-      removeLoadingMessage();
       addSystemMessage('Error: Could not load revision history. Please authenticate first by clicking the account button.');
       return;
     }
@@ -119,7 +104,6 @@ async function processQuery(query) {
     // Get auth token from storage
     const authTokenData = await chrome.storage.local.get('authToken');
     if (!authTokenData.authToken) {
-      removeLoadingMessage();
       addSystemMessage('Error: Authentication token not found. Please sign in again.');
       return;
     }
@@ -134,10 +118,14 @@ async function processQuery(query) {
       authToken: authTokenData.authToken,
     };
     
-    console.log(`[CHAT] Sending request with ${requestPayload.revisions?.revisions?.length || 0} revisions to backend`);
+    console.log(`[CHAT] Sending streaming request to backend`);
 
-    // Send query to backend for AI analysis
-    const response = await fetch(`${BACKEND_URL}/query-changes`, {
+    // Create streaming message container
+    const streamingMessage = addStreamingSystemMessage();
+    let fullText = '';
+
+    // Send query to backend for streaming AI analysis
+    const response = await fetch(`${BACKEND_URL}/query-changes-stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -149,18 +137,78 @@ async function processQuery(query) {
       throw new Error(`Server error: ${response.status}`);
     }
 
-    const data = await response.json();
-    removeLoadingMessage();
+    // Read the streaming response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let charQueue = [];
+    let isAnimating = false;
 
-    if (data.success && data.answer) {
-      addSystemMessage(data.answer);
-    } else {
-      addSystemMessage('Unable to process your query. Please try again.');
+    // Function to animate characters one by one
+    async function animateCharacters() {
+      if (isAnimating || charQueue.length === 0) return;
+      isAnimating = true;
+
+      while (charQueue.length > 0) {
+        charQueue.shift();
+        streamingMessage.textContent = fullText.substring(0, fullText.length - charQueue.length);
+        scrollToBottom();
+        await new Promise(resolve => setTimeout(resolve, 10)); // 10ms delay per character
+      }
+
+      isAnimating = false;
+    }
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const text = decoder.decode(value, { stream: true });
+      const lines = text.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.text) {
+              // Accumulate text and add characters to queue
+              const newChars = data.text.split('');
+              fullText += data.text;
+              charQueue.push(...newChars);
+              await animateCharacters();
+            }
+
+            if (data.done) {
+              // Make sure all characters are displayed
+              streamingMessage.textContent = fullText;
+              // Parse markdown now that streaming is complete
+              streamingMessage.innerHTML = marked.parse(fullText);
+              // Save the complete message to storage
+              saveChatMessage('system', fullText).catch(err => console.error('[CHAT] Error saving system message:', err));
+              console.log('[CHAT] Streaming complete');
+              return;
+            }
+
+            if (data.error) {
+              streamingMessage.textContent = `Error: ${data.error}`;
+              return;
+            }
+          } catch (e) {
+            console.error('Error parsing stream data:', e);
+          }
+        }
+      }
     }
   } catch (error) {
     console.error('Query error:', error);
-    removeLoadingMessage();
     addSystemMessage(`Error: ${error.message}. Make sure the backend is running on ${BACKEND_URL}`);
+  }
+}
+
+// Keep scrolling as text streams in
+function scrollToBottom() {
+  if (chatMessagesContainer) {
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
   }
 }
 
@@ -188,29 +236,6 @@ function addChatStyles() {
       background: var(--input-bg);
       color: var(--text);
       margin-right: 20px;
-    }
-
-    .chat-message.loading {
-      background: var(--input-bg);
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-right: 20px;
-    }
-
-    .spinner {
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      border: 2px solid var(--text-muted);
-      border-top-color: var(--text);
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
     }
   `;
   document.head.appendChild(style);
