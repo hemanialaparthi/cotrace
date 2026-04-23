@@ -10,8 +10,48 @@ app.use(cors());
 app.use(express.json());
 
 // Helper function to stream Claude API responses
-async function streamClaudeResponse(systemPrompt, userMessage, res) {
+async function streamClaudeResponse(systemPrompt, userMessage, res, timing) {
   try {
+    const timingState = timing || {};
+    timingState.metaEmitted = timingState.metaEmitted || {};
+
+    const buildMeta = (phase) => {
+      const requestStart = timingState.requestStart || null;
+      const revisionsFetchedAt = timingState.revisionsFetchedAt || null;
+      const diffsBuiltAt = timingState.diffsBuiltAt || null;
+      const firstChunkAt = timingState.firstChunkAt || null;
+      const streamEndAt = timingState.streamEndAt || null;
+
+      const durations = {
+        fetchMs: requestStart && revisionsFetchedAt ? revisionsFetchedAt - requestStart : null,
+        diffMs: revisionsFetchedAt && diffsBuiltAt ? diffsBuiltAt - revisionsFetchedAt : null,
+        toFirstChunkMs: requestStart && firstChunkAt ? firstChunkAt - requestStart : null,
+        totalStreamMs: firstChunkAt && streamEndAt ? streamEndAt - firstChunkAt : null,
+        totalMs: requestStart && streamEndAt ? streamEndAt - requestStart : null
+      };
+
+      return {
+        phase,
+        timestamps: {
+          requestStart,
+          revisionsFetchedAt,
+          diffsBuiltAt,
+          firstChunkAt,
+          streamEndAt
+        },
+        durations,
+        sizes: timingState.sizes || {}
+      };
+    };
+
+    const emitMeta = (phase) => {
+      if (timingState.metaEmitted[phase]) {
+        return;
+      }
+      timingState.metaEmitted[phase] = true;
+      res.write(`data: ${JSON.stringify({ meta: buildMeta(phase) })}\n\n`);
+    };
+
     const response = await axios.post(
       "https://api.anthropic.com/v1/messages",
       {
@@ -54,12 +94,20 @@ async function streamClaudeResponse(systemPrompt, userMessage, res) {
             if (data.type === 'content_block_delta') {
               const delta = data.delta;
               if (delta.type === 'text_delta' && delta.text) {
+                if (!timingState.firstChunkAt) {
+                  timingState.firstChunkAt = Date.now();
+                  emitMeta('first_chunk');
+                }
                 // Send the text chunk as an SSE message
                 res.write(`data: ${JSON.stringify({ text: delta.text })}\n\n`);
               }
             }
             // Send message_stop event to signal end
             else if (data.type === 'message_stop') {
+              if (!timingState.streamEndAt) {
+                timingState.streamEndAt = Date.now();
+                emitMeta('done');
+              }
               res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
             }
           } catch (e) {
@@ -70,6 +118,10 @@ async function streamClaudeResponse(systemPrompt, userMessage, res) {
     });
 
     response.data.on('end', () => {
+      if (!timingState.streamEndAt) {
+        timingState.streamEndAt = Date.now();
+        emitMeta('end');
+      }
       if (!res.writableEnded) {
         res.end();
       }
@@ -200,6 +252,15 @@ app.post("/query-changes-stream", async (req, res) => {
       return res.status(400).json({ error: "Query, revisions, and authToken are required" });
     }
 
+    const timing = {
+      requestStart: Date.now(),
+      revisionsFetchedAt: null,
+      diffsBuiltAt: null,
+      firstChunkAt: null,
+      streamEndAt: null,
+      sizes: {}
+    };
+
     console.log(`[QUERY-STREAM] Processing query: "${query}"`);
     console.log(`[TOKEN] Auth token received (length: ${authToken.length})`);
     console.log(`[REVISIONS] Total revisions received: ${revisions.revisions?.length || 0}`);
@@ -223,6 +284,7 @@ app.post("/query-changes-stream", async (req, res) => {
     
     // Wait for all requests to complete
     await Promise.all(fetchPromises);
+    timing.revisionsFetchedAt = Date.now();
     console.log(`[FETCH] Parallel fetch complete for all ${revisionsToAnalyze.length} revisions`);
 
     // Generate diffs between consecutive revisions
@@ -248,6 +310,7 @@ app.post("/query-changes-stream", async (req, res) => {
     }
 
     console.log(`[SUMMARY] Generated ${diffs.length} diffs from ${revisionsToAnalyze.length} revisions`);
+    timing.diffsBuiltAt = Date.now();
 
     // Prepare detailed content summary for AI
     const contentSummary = diffs.map(d => 
@@ -285,8 +348,17 @@ ${contentSummary || 'No changes available'}
 
 Now answer the user's question based on this document history. Focus on intelligence and clarity over exhaustive detail.`;
 
+    timing.sizes = {
+      queryChars: (query || '').length,
+      revisionsAnalyzed: revisionsToAnalyze.length,
+      revisionsTotal: revisions.revisions.length,
+      diffsCount: diffs.length,
+      contentSummaryChars: contentSummary.length,
+      systemPromptChars: systemPrompt.length
+    };
+
     // Stream the response from Claude
-    await streamClaudeResponse(systemPrompt, query, res);
+    await streamClaudeResponse(systemPrompt, query, res, timing);
   } catch (error) {
     console.error(`[ERROR] Query streaming failed:`, error.message);
     res.status(500).json({ error: "Failed to process query", details: error.message });

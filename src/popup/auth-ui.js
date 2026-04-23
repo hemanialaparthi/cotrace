@@ -51,6 +51,7 @@ function initAuthUI() {
   const settingsBtn = document.querySelector('.settings-btn');
   const signOutBtn = document.querySelector('.sign-out-btn');
   const clearChatBtn = document.querySelector('.clear-chat-btn');
+  const exportLatencyBtn = document.querySelector('.export-latency-btn');
 
   if (accountBtn) {
     accountBtn.addEventListener('click', handleAuthButtonClick);
@@ -68,6 +69,10 @@ function initAuthUI() {
     clearChatBtn.addEventListener('click', handleClearChat);
   }
 
+  if (exportLatencyBtn) {
+    exportLatencyBtn.addEventListener('click', handleExportLatencyCsv);
+  }
+
   // Close dropdown when clicking outside
   document.addEventListener('click', closeSettingsDropdown);
   
@@ -75,7 +80,8 @@ function initAuthUI() {
     accountBtn: !!accountBtn,
     settingsBtn: !!settingsBtn,
     signOutBtn: !!signOutBtn,
-    clearChatBtn: !!clearChatBtn
+    clearChatBtn: !!clearChatBtn,
+    exportLatencyBtn: !!exportLatencyBtn
   });
 }
 
@@ -160,6 +166,23 @@ function handleClearChat() {
   
   if (confirm('Are you sure you want to clear the chat history for this document?')) {
     clearChatHistory();
+  }
+}
+
+// Handle export latency CSV
+function handleExportLatencyCsv() {
+  console.log('handleExportLatencyCsv called');
+
+  // Close dropdown
+  const dropdown = document.querySelector('.settings-dropdown');
+  if (dropdown) {
+    dropdown.classList.remove('active');
+  }
+
+  if (typeof exportLatencyCsv === 'function') {
+    exportLatencyCsv();
+  } else {
+    console.warn('[METRICS] exportLatencyCsv not available');
   }
 }
 

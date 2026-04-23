@@ -2,6 +2,26 @@
 // Handles chat interface and message processing
 
 const BACKEND_URL = 'http://localhost:3000';
+const METRICS_CSV_KEY = 'latency-metrics-csv';
+const METRICS_HEADER = [
+  'timestamp_iso',
+  'file_id',
+  'file_title',
+  'file_type',
+  'query_chars',
+  'revisions_analyzed',
+  'revisions_total',
+  'diffs_count',
+  'content_summary_chars',
+  'system_prompt_chars',
+  'server_fetch_ms',
+  'server_diff_ms',
+  'server_ttfb_ms',
+  'server_stream_ms',
+  'server_total_ms',
+  'client_ttfb_ms',
+  'client_total_ms'
+];
 
 // DOM Elements
 let chatMessagesContainer;
@@ -117,6 +137,29 @@ async function processQuery(query) {
       revisions: getRevisionHistory(),
       authToken: authTokenData.authToken,
     };
+
+    const clientTiming = {
+      requestStart: performance.now(),
+      firstChunkAt: null,
+      doneAt: null
+    };
+    let serverMeta = null;
+    let metricsPersisted = false;
+
+    const persistMetricsOnce = () => {
+      if (metricsPersisted || clientTiming.doneAt === null) {
+        return;
+      }
+      metricsPersisted = true;
+      const row = buildLatencyRow({
+        activeFile,
+        queryChars: query.length,
+        clientTiming,
+        serverMeta
+      });
+      appendLatencyCsvRow(row).catch(err => console.error('[METRICS] Error saving CSV row:', err));
+      console.log('[METRICS] Latency row saved:', row);
+    };
     
     console.log(`[CHAT] Sending streaming request to backend`);
 
@@ -170,8 +213,18 @@ async function processQuery(query) {
           try {
             const data = JSON.parse(line.slice(6));
 
+            if (data.meta) {
+              serverMeta = data.meta;
+              if (data.meta.phase === 'done' || data.meta.phase === 'end') {
+                persistMetricsOnce();
+              }
+            }
+
             if (data.text) {
               // Accumulate text and add characters to queue
+              if (clientTiming.firstChunkAt === null) {
+                clientTiming.firstChunkAt = performance.now();
+              }
               const newChars = data.text.split('');
               fullText += data.text;
               charQueue.push(...newChars);
@@ -179,6 +232,8 @@ async function processQuery(query) {
             }
 
             if (data.done) {
+              clientTiming.doneAt = performance.now();
+              persistMetricsOnce();
               // Make sure all characters are displayed
               streamingMessage.textContent = fullText;
               // Parse markdown now that streaming is complete
@@ -313,4 +368,85 @@ async function clearChatHistory() {
   } catch (error) {
     console.error('[CHAT] Error clearing history:', error);
   }
+}
+
+function buildLatencyRow({ activeFile, queryChars, clientTiming, serverMeta }) {
+  const nowIso = new Date().toISOString();
+  const durations = serverMeta?.durations || {};
+  const sizes = serverMeta?.sizes || {};
+
+  const clientTtfbMs = clientTiming.firstChunkAt !== null
+    ? Math.round(clientTiming.firstChunkAt - clientTiming.requestStart)
+    : null;
+  const clientTotalMs = clientTiming.doneAt !== null
+    ? Math.round(clientTiming.doneAt - clientTiming.requestStart)
+    : null;
+
+  return {
+    timestamp_iso: nowIso,
+    file_id: activeFile?.id || '',
+    file_title: activeFile?.title || '',
+    file_type: activeFile?.type || '',
+    query_chars: queryChars ?? '',
+    revisions_analyzed: sizes.revisionsAnalyzed ?? '',
+    revisions_total: sizes.revisionsTotal ?? '',
+    diffs_count: sizes.diffsCount ?? '',
+    content_summary_chars: sizes.contentSummaryChars ?? '',
+    system_prompt_chars: sizes.systemPromptChars ?? '',
+    server_fetch_ms: durations.fetchMs ?? '',
+    server_diff_ms: durations.diffMs ?? '',
+    server_ttfb_ms: durations.toFirstChunkMs ?? '',
+    server_stream_ms: durations.totalStreamMs ?? '',
+    server_total_ms: durations.totalMs ?? '',
+    client_ttfb_ms: clientTtfbMs ?? '',
+    client_total_ms: clientTotalMs ?? ''
+  };
+}
+
+function escapeCsvValue(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const str = String(value);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+async function appendLatencyCsvRow(row) {
+  const data = await chrome.storage.local.get(METRICS_CSV_KEY);
+  let csv = data[METRICS_CSV_KEY] || '';
+
+  if (!csv) {
+    csv = `${METRICS_HEADER.join(',')}\n`;
+  }
+
+  const rowLine = METRICS_HEADER
+    .map((key) => escapeCsvValue(row[key]))
+    .join(',');
+
+  csv += `${rowLine}\n`;
+  await chrome.storage.local.set({ [METRICS_CSV_KEY]: csv });
+}
+
+async function exportLatencyCsv() {
+  const data = await chrome.storage.local.get(METRICS_CSV_KEY);
+  const csv = data[METRICS_CSV_KEY];
+
+  if (!csv) {
+    window.alert('No latency data available yet. Run a query first.');
+    return;
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  link.href = url;
+  link.download = `cotrace-latency-${timestamp}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
