@@ -1,6 +1,6 @@
-# Cotrace – Semantic Summarization of Collaborative Changes
+# CoTrace – Semantic Summarization of Collaborative Changes
 
-**Cotrace** is a Chrome extension that uses AI (Claude) to intelligently summarize the collaborative editing history of Google Docs, Sheets, and Slides. Instead of manually reviewing revision histories, users get instant semantic summaries of what changed and why.
+**CoTrace** is a Chrome extension that uses AI (Claude) to intelligently summarize the collaborative editing history of Google Docs, Sheets, and Slides. Instead of manually reviewing revision histories, users get instant semantic summaries of what changed and why.
 
 ## Features
 
@@ -74,7 +74,7 @@ The extension uses Google OAuth2 for secure authentication.
 #### 2a. Create Google Cloud Project
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (name it "Cotrace")
+2. Create a new project (name it "CoTrace")
 3. Enable these APIs:
    - Google Drive API
    - Google Docs API
@@ -165,7 +165,7 @@ The `dev` script uses `nodemon`, which auto-restarts on code changes.
 ### Terminal 2: Test the Extension
 
 1. Open a Google Doc/Sheet/Slide in Chrome
-2. Click the **Cotrace** extension icon in the toolbar
+2. Click the **CoTrace** extension icon in the toolbar
 3. Click **Sign In** to authenticate with Google
 4. Once authenticated, click **Chat** tab
 5. Type a question (e.g., "What changed in this document?")
@@ -175,8 +175,8 @@ The `dev` script uses `nodemon`, which auto-restarts on code changes.
 ### Verify Everything Works
 
 **Extension logs** (to see requests):
-- Open `chrome://extensions/` → Click **Details** on Cotrace → **Background page**
-- Watch the DevTools console for messages like `"Cotrace background service worker started"`
+- Open `chrome://extensions/` → Click **Details** on CoTrace → **Background page**
+- Watch the DevTools console for messages like `"CoTrace background service worker started"`
 
 **Backend logs** (to see API calls):
 - Check terminal running `npm run dev`
@@ -200,7 +200,7 @@ The `dev` script uses `nodemon`, which auto-restarts on code changes.
 
 **Service Worker Changes:**
 - Edit `background-new.js` or `src/background/*`
-- Go to `chrome://extensions/` → Click refresh icon
+- Go to `chrome://extensions/` → Click refresh icon on CoTrace
 - You may need to reload extension and close/reopen popup
 
 ### Testing & Debugging
@@ -243,6 +243,80 @@ data: {meta: {...timing data...}}
 data: {chunk: "This document was updated..."}
 data: {chunk: "with new sections..."}
 ```
+
+---
+
+## Error Handling & Fallbacks
+
+CoTrace gracefully handles API failures with intelligent fallbacks:
+
+### Example: Claude API Unavailable
+
+If the Claude API is unreachable or rate-limited, the extension provides a cached summary:
+
+```javascript
+// In cotrace-backend/server.js
+try {
+  const response = await anthropic.messages.create({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 1024,
+    messages: [{ role: "user", content: prompt }]
+  });
+} catch (error) {
+  if (error.status === 429) {
+    // Rate limited - return cached summary
+    res.write(`data: ${JSON.stringify({
+      chunk: "Claude API is busy. Showing cached summary from last request...",
+      cached: true
+    })}\n\n`);
+    res.write(`data: ${JSON.stringify({ chunk: previousSummary })}\n\n`);
+  } else {
+    // Connection error - return generic fallback
+    res.write(`data: ${JSON.stringify({
+      chunk: "Unable to reach AI service. Here's the raw revision history instead:",
+      fallback: true
+    })}\n\n`);
+  }
+}
+```
+
+### Example: Google API Fails
+
+If revision history can't be fetched, CoTrace shows a helpful error:
+
+```javascript
+// In cotrace-backend/server.js
+try {
+  const revisions = await drive.revisions.list({
+    fileId: fileId,
+    fields: "revisions(id,modifiedTime,lastModifyingUser,changeTime)"
+  });
+} catch (error) {
+  if (error.code === 403) {
+    return res.status(403).json({
+      error: "Access denied. Please re-authenticate.",
+      action: "sign-in"
+    });
+  } else if (error.code === 404) {
+    return res.status(404).json({
+      error: "File not found or deleted.",
+      action: "select-another-file"
+    });
+  }
+  // Generic fallback
+  return res.status(500).json({
+    error: "Could not fetch revision history.",
+    fallback: "Try again or contact support"
+  });
+}
+```
+
+### User-Facing Fallback Flow
+
+1. **Primary:** Fetch live data from Google API + Claude summary
+2. **Secondary:** If Claude fails → show cached summary from storage
+3. **Tertiary:** If Google API fails → show local document changes only
+4. **Final:** Clear error message with actionable next steps
 
 ---
 
